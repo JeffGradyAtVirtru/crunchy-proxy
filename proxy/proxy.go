@@ -288,14 +288,18 @@ func (p *Proxy) HandleConnection(client net.Conn) {
 				 * Examine all of the messages in the buffer and determine if any of
 				 * them are a ReadyForQuery message.
 				 */
+                                columnIndex := int16(0)
 				for start := 0; start < length; {
 					messageType = protocol.GetMessageType(message[start:])
 					messageLength := protocol.GetMessageLength(message[start:])
-                                        numColumns := protocol.GetColumnIndex(message[start:], tdfColumn)
-                                        log.Infof("COL INDEX: %d", numColumns)
+                                        if messageType == 84 {
+                                            columnIndex = protocol.GetColumnIndex(message[start:], tdfColumn)
+                                        }
+                                        log.Infof("COL INDEX: %d", columnIndex)
                                         end := start + int(messageLength) + 1
                                         log.Infof("Message %c %d: %s", messageType, messageLength, message[start:end])
                                         log.Infof("Message in hex: %x", messageType, messageLength, message[start:end])
+                                        _ = protocol.DecryptDataMessageByIndex(message[start:], columnIndex)
 					/*
 					 * Calculate the next start position, add '1' to the message
 					 * length to account for the message type.

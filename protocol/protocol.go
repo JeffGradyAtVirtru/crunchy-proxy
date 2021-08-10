@@ -142,6 +142,49 @@ func GetColumnIndex(message []byte, columnName string) int16 {
 	return 0
 }
 
+/*
+ * 
+ *
+ * 
+ */
+func DecryptDataMessageByIndex(message []byte, columnIndex int16) []byte {
+	var messageLength int32
+        var numColumns int16
+
+        messageType := message[0]
+        /* If it's not a data message, ignore it. */
+        if messageType != 68 {
+           log.Info("Message type was not 68")
+           return message
+        }
+
+	reader := bytes.NewReader(message[1:5])
+	binary.Read(reader, binary.BigEndian, &messageLength)
+
+	reader = bytes.NewReader(message[5:7])
+	binary.Read(reader, binary.BigEndian, &numColumns)
+
+        start := int32(7)
+        i := start
+        var fieldSize int32
+        for j := int16(0); j < numColumns; j += 1 {
+      	    reader = bytes.NewReader(message[i:i+4])
+            binary.Read(reader, binary.BigEndian, &fieldSize)
+            log.Infof("j %d Found field size: %d", j, fieldSize)
+            i += 4
+            if j == columnIndex {
+               /* Do things to the data...
+                  We probably want to record the old size?
+               */
+               log.Infof("j %d For columnIndex %d we have %x", j, columnIndex, message[i:i+fieldSize])
+            }
+            log.Infof("For j %d we have %x", j, message[i:i+fieldSize])
+            i += fieldSize
+        }
+
+	return message
+}
+
 /* IsAuthenticationOk
  *
  * Check an Authentication Message to determine if it is an AuthenticationOK
