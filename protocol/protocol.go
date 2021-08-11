@@ -139,7 +139,7 @@ func GetColumnIndex(message []byte, columnName string) int16 {
             i = int32(end + 19) /* that's the number of trailing bytes after the null term string */
         }
 
-	return 0
+	return -1
 }
 
 /*
@@ -147,9 +147,10 @@ func GetColumnIndex(message []byte, columnName string) int16 {
  *
  * 
  */
-func DecryptDataMessageByIndex(message []byte, columnIndex int16) []byte {
+func GetDataByColumnIndex(message []byte, columnIndex int16) []byte {
 	var messageLength int32
         var numColumns int16
+	var data []byte
 
         messageType := message[0]
         /* If it's not a data message, ignore it. */
@@ -157,7 +158,10 @@ func DecryptDataMessageByIndex(message []byte, columnIndex int16) []byte {
            log.Info("Message type was not 68")
            return message
         }
-
+	if columnIndex == -1 {
+		log.Info("Column index was -1")
+		return message
+	}
 	reader := bytes.NewReader(message[1:5])
 	binary.Read(reader, binary.BigEndian, &messageLength)
 
@@ -173,17 +177,89 @@ func DecryptDataMessageByIndex(message []byte, columnIndex int16) []byte {
             log.Infof("j %d Found field size: %d", j, fieldSize)
             i += 4
             if j == columnIndex {
-               /* Do things to the data...
-                  We probably want to record the old size?
-               */
-               log.Infof("j %d For columnIndex %d we have %x", j, columnIndex, message[i:i+fieldSize])
+		    log.Infof("j %d For columnIndex %d we have %x", j, columnIndex, message[i:i+fieldSize])
+		    data = append(data, message[i:i+fieldSize]...)
             }
             log.Infof("For j %d we have %x", j, message[i:i+fieldSize])
             i += fieldSize
         }
 
-	return message
+	return data
 }
+
+/*
+ * 
+ *
+ * 
+ */
+func NewDataMessageInsertByColumnIndex(message []byte, columnIndex int16, newData []byte) []byte {
+	var messageLength int32
+        var numColumns int16
+	var newPayload []byte
+	var newLength int32
+
+	log.Infof("O.G. message: %s", message)
+	log.Infof("O.G. message in hex: %x", message)
+	
+        messageType := message[0]
+        /* If it's not a data message, ignore it. */
+        if messageType != 68 {
+           log.Info("Message type was not 68")
+           return message
+        }
+	if columnIndex == -1 {
+		log.Info("Column index was -1")
+		return message
+	}
+
+	reader := bytes.NewReader(message[1:5])
+	binary.Read(reader, binary.BigEndian, &messageLength)
+
+	reader = bytes.NewReader(message[5:7])
+	binary.Read(reader, binary.BigEndian, &numColumns)
+
+	newLength = 6 /* int32 size field, plus int16 num columns, ignore type byte in length */
+	
+        start := int32(7)
+        i := start
+        var fieldSize int32
+        for j := int16(0); j < numColumns; j += 1 {
+      	    reader = bytes.NewReader(message[i:i+4])
+            binary.Read(reader, binary.BigEndian, &fieldSize)
+            log.Infof("j %d Found field size: %d", j, fieldSize)
+            if j == columnIndex {
+		    log.Infof("j %d For columnIndex %d we have %x", j, columnIndex, message[i+4:i+4+fieldSize])
+		    newSize := make([]byte, 4)
+		    binary.BigEndian.PutUint32(newSize, uint32(len(newData)))
+		    newLength += 4 + int32(len(newData))
+		    newPayload = append(newPayload, newSize...)
+		    newPayload = append(newPayload, newData...)
+            } else {
+		    /* if it's not the column data we're replacing, then just append the
+		       field size and data of size fieldSize.
+		    */
+		    newLength += 4 + fieldSize
+		    /* note this is copying the size plus the data */
+		    newPayload = append(newPayload, message[i:i+4+fieldSize]...)
+	    }
+            log.Infof("For j %d we have %x", j, message[i+4:i+4+fieldSize])
+            i += 4+fieldSize
+        }
+
+	var newMessage []byte
+	newMessage = append(newMessage, message[0])
+	newLengthBytes := make([]byte, 4)
+	binary.BigEndian.PutUint32(newLengthBytes, uint32(newLength))
+	newMessage = append(newMessage, newLengthBytes...)
+
+	/* column count stays the same */
+	newMessage = append(newMessage, message[5:7]...)
+
+	newMessage = append(newMessage, newPayload...)
+	
+	return newMessage
+}
+
 
 /* IsAuthenticationOk
  *

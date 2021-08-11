@@ -238,7 +238,7 @@ func (p *Proxy) HandleConnection(client net.Conn) {
 			return
 		} else if messageType == protocol.QueryMessageType {
 			annotations, tdfColumn := getAnnotations(message)
-                        log.Infof("FOUND COLUMN: %s", tdfColumn)
+                        log.Infof("FOUND ANNOTATION COLUMN: %s", tdfColumn)
 
 			if annotations[StartAnnotation] {
 				statementBlock = true
@@ -276,19 +276,28 @@ func (p *Proxy) HandleConnection(client net.Conn) {
 			 * is found.
 			 */
 			for !done {
+				
 				if message, length, err = connect.Receive(backend); err != nil {
 					log.Debugf("Error receiving response from backend %s", backend.RemoteAddr())
 					log.Debugf("Error: %s", err.Error())
 					done = true
 				}
 
+				/* variables for when we decrypt and rewrite some 'D' messages... */
+				var newMessage []byte
+				var newLength int32
+
+				newLength = 0
+				/*newMessage = append(new_message, message[:length]...)
+				newLength = length*/
+				
 				messageType := protocol.GetMessageType(message[:length])
 
 				/*
 				 * Examine all of the messages in the buffer and determine if any of
 				 * them are a ReadyForQuery message.
 				 */
-                                columnIndex := int16(0)
+                                columnIndex := int16(-1)
 				for start := 0; start < length; {
 					messageType = protocol.GetMessageType(message[start:])
 					messageLength := protocol.GetMessageLength(message[start:])
@@ -299,7 +308,33 @@ func (p *Proxy) HandleConnection(client net.Conn) {
                                         end := start + int(messageLength) + 1
                                         log.Infof("Message %c %d: %s", messageType, messageLength, message[start:end])
                                         log.Infof("Message in hex: %x", messageType, messageLength, message[start:end])
-                                        _ = protocol.DecryptDataMessageByIndex(message[start:], columnIndex)
+					if messageType == 68 {
+						/* +1 because of the message type byte */
+						tmp := protocol.GetDataByColumnIndex(message[start:end], columnIndex)
+						log.Infof("tmp message : %s", tmp)
+						log.Infof("tmp message in hex: %x", tmp)
+
+						/* is this:  \xZZZZZZZ */
+						newData := []byte{92,120,90,90,90,90,90,90,90}
+						
+						tmp2 := protocol.NewDataMessageInsertByColumnIndex(
+							message[start:end],
+							columnIndex,
+							newData)
+						log.Infof("tmp2 message in hex: %x", tmp2)
+						
+						/*
+						   1.)  Get data for only that column, that's tdf data.
+						   2.)  decrypt that tdf data, get plaintext
+						   3.)  Pass orig data message, col index, and plaintext to func that
+						        returns new data message with plaintext and new lengths.
+						*/
+						newMessage = append(newMessage, tmp2...)
+						newLength += protocol.GetMessageLength(tmp2)+1
+					} else {
+						newMessage = append(newMessage, message[start:int32(start)+messageLength+1]...)
+						newLength += messageLength+1
+					}
 					/*
 					 * Calculate the next start position, add '1' to the message
 					 * length to account for the message type.
@@ -307,7 +342,7 @@ func (p *Proxy) HandleConnection(client net.Conn) {
 					start = (start + int(messageLength) + 1)
 				}
 
-				if _, err = connect.Send(client, message[:length]); err != nil {
+				if _, err = connect.Send(client, newMessage[:newLength]); err != nil {
 					log.Debugf("Error sending response to client %s", client.RemoteAddr())
 					log.Debugf("Error: %s", err.Error())
 					done = true
