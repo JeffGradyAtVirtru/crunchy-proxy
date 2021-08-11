@@ -18,6 +18,8 @@ import (
 	"io"
 	"net"
 	"sync"
+	"os"
+	"encoding/hex"
 
 	"github.com/crunchydata/crunchy-proxy/common"
 	"github.com/crunchydata/crunchy-proxy/config"
@@ -25,6 +27,9 @@ import (
 	"github.com/crunchydata/crunchy-proxy/pool"
 	"github.com/crunchydata/crunchy-proxy/protocol"
 	"github.com/crunchydata/crunchy-proxy/util/log"
+
+	virtruclient "github.com/virtru/go-tdf3-sdk-wrapper"
+	"go.uber.org/zap"
 )
 
 type Proxy struct {
@@ -315,12 +320,20 @@ func (p *Proxy) HandleConnection(client net.Conn) {
 						log.Infof("tmp message in hex: %x", tmp)
 
 						/* is this:  \xZZZZZZZ */
-						newData := []byte{92,120,90,90,90,90,90,90,90}
+						/* newData := []byte{92,120,90,90,90,90,90,90,90}*/
+
+						logger, _ := zap.NewDevelopment()
+						virtruSDK := virtruclient.NewVirtruClient(os.Getenv("TDF_USER"), os.Getenv("TDF_APPID"), logger)
+						binTdf, err := hex.DecodeString(string(tmp[2:]))
+						log.Infof("hex decode tdf error: %s", err)
+						log.Infof("Binary tdf: %x", binTdf)
+						decRes, _ := virtruSDK.DecryptTDF(binTdf)
+						log.Infof("Decrypted result: %s", decRes)
 						
 						tmp2 := protocol.NewDataMessageInsertByColumnIndex(
 							message[start:end],
 							columnIndex,
-							newData)
+							[]byte(decRes))
 						log.Infof("tmp2 message in hex: %x", tmp2)
 						
 						/*
