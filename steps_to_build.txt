@@ -1,0 +1,44 @@
+go mod download github.com/virtru/go-tdf3-sdk-wrapper
+vi .git/config
+git config --global url.git@github.com:.insteadOf https://github.com/\n
+go get github.com/virtru/go-tdf3-sdk-wrapper
+vi ~/.gitconfig
+export GOPRIVATE=github.com/virtru/go-tdf3-sdk-wrapper
+go get github.com/virtru/go-tdf3-sdk-wrapper
+#CFLAGS: -I/virtru-tdf3-lib-cpp/include
+export SRCDIR=/Users/jgrady/git/go-tdf3-sdk-wrapper
+CFLAGS="-I${SRCDIR}/virtru-tdf3-lib-cpp/include" LDFLAGS="-L${SRCDIR}/virtru-tdf3-lib-cpp/lib -lvirtru_tdf3_static_combined -lstdc++" go get github.com/virtru/go-tdf3-sdk-wrapper
+export CFLAGS="-I${SRCDIR}/virtru-tdf3-lib-cpp/include"
+echo $CFLAGS
+export LDFLAGS="-L${SRCDIR}/virtru-tdf3-lib-cpp/lib -lvirtru_tdf3_static_combined -lstdc++"
+go get github.com/virtru/go-tdf3-sdk-wrapper
+ls /Users/jgrady/git/go-tdf3-sdk-wrapper/virtru-tdf3-lib-cpp/include
+export HOST_EXTRA_CFLAGS=$CFLAGS\nexport HOST_EXTRA_LDFLAGS=$LDFLAGS\n
+go get github.com/virtru/go-tdf3-sdk-wrapper
+export HOST_EXTRA_CFLAGS=$CFLAGS
+echo $HOST_EXTRA_CFLAGS
+echo $HOST_EXTRA_LDFLAGS
+ls /Users/jgrady/git/go-tdf3-sdk-wrapper/virtru-tdf3-lib-cpp/lib
+export HOST_CFLAGS=$CFLAGS
+export HOST_EXTRA_LDFLAGS=$LDFLAGS
+go get github.com/virtru/go-tdf3-sdk-wrapper
+echo $CFLAGS
+ls /Users/jgrady/git/go-tdf3-sdk-wrapper/virtru-tdf3-lib-cpp/include/virtru_policy_c.h
+export HOST_LDFLAGS=$LDFLAGS
+export CPPFLAGS=$CFLAGS
+go get github.com/virtru/go-tdf3-sdk-wrapper
+export HOST_CPPFLAGS=$CPPFLAGS
+echo $v
+echo $HOST_CPPFLAGS
+go get github.com/virtru/go-tdf3-sdk-wrapper
+export HOST_EXTRA_CPPFLAGS=$CPPFLAGS
+go get github.com/virtru/go-tdf3-sdk-wrapper
+set | grep FLAGS
+ls /Users/jgrady/git/go-tdf3-sdk-wrapper/virtru-tdf3-lib-cpp/include/virtru_policy_c.h
+go get github.com/virtru/go-tdf3-sdk-wrapper
+export CGO_CFLAGS=$CPPFLAGS
+go get github.com/virtru/go-tdf3-sdk-wrapper
+export CGO_LDFLAGS=$LDFLAGS
+go get github.com/virtru/go-tdf3-sdk-wrapper
+go get github.com/virtru/go-tdf3-sdk-wrapper
+history -n 300

@@ -18,6 +18,8 @@ import (
 	"io"
 	"net"
 	"sync"
+	"os"
+	"encoding/hex"
 
 	"github.com/crunchydata/crunchy-proxy/common"
 	"github.com/crunchydata/crunchy-proxy/config"
@@ -25,6 +27,9 @@ import (
 	"github.com/crunchydata/crunchy-proxy/pool"
 	"github.com/crunchydata/crunchy-proxy/protocol"
 	"github.com/crunchydata/crunchy-proxy/util/log"
+
+	virtruclient "github.com/virtru/go-tdf3-sdk-wrapper"
+	"go.uber.org/zap"
 )
 
 type Proxy struct {
@@ -69,7 +74,7 @@ func (p *Proxy) setupPools() {
 		/* Create connections and add to pool. */
 		for i := 0; i < capacity; i++ {
 			/* Connect and authenticate */
-			log.Infof("Connecting to node '%s' at %s...", name, node.HostPort)
+			log.Infof("Connecting to adsfadsfadfa node '%s' at %s...", name, node.HostPort)
 			connection, err := connect.Connect(node.HostPort)
 
 			username := config.GetString("credentials.username")
@@ -224,6 +229,8 @@ func (p *Proxy) HandleConnection(client net.Conn) {
 			break
 		}
 
+                log.Infof("Message: %s", message)
+
 		messageType := protocol.GetMessageType(message)
 
 		/*
@@ -235,7 +242,8 @@ func (p *Proxy) HandleConnection(client net.Conn) {
 			log.Infof("Client: %s - disconnected", client.RemoteAddr())
 			return
 		} else if messageType == protocol.QueryMessageType {
-			annotations := getAnnotations(message)
+			annotations, tdfColumn := getAnnotations(message)
+                        log.Infof("FOUND ANNOTATION COLUMN: %s", tdfColumn)
 
 			if annotations[StartAnnotation] {
 				statementBlock = true
@@ -273,22 +281,73 @@ func (p *Proxy) HandleConnection(client net.Conn) {
 			 * is found.
 			 */
 			for !done {
+				
 				if message, length, err = connect.Receive(backend); err != nil {
 					log.Debugf("Error receiving response from backend %s", backend.RemoteAddr())
 					log.Debugf("Error: %s", err.Error())
 					done = true
 				}
 
+				/* variables for when we decrypt and rewrite some 'D' messages... */
+				var newMessage []byte
+				var newLength int32
+
+				newLength = 0
+				/*newMessage = append(new_message, message[:length]...)
+				newLength = length*/
+				
 				messageType := protocol.GetMessageType(message[:length])
 
 				/*
 				 * Examine all of the messages in the buffer and determine if any of
 				 * them are a ReadyForQuery message.
 				 */
+                                columnIndex := int16(-1)
 				for start := 0; start < length; {
 					messageType = protocol.GetMessageType(message[start:])
 					messageLength := protocol.GetMessageLength(message[start:])
+                                        if messageType == 84 {
+                                            columnIndex = protocol.GetColumnIndex(message[start:], tdfColumn)
+                                        }
+                                        log.Infof("COL INDEX: %d", columnIndex)
+                                        end := start + int(messageLength) + 1
+                                        log.Infof("Message %c %d: %s", messageType, messageLength, message[start:end])
+                                        log.Infof("Message in hex: %x", messageType, messageLength, message[start:end])
+					if messageType == 68 {
+						/* +1 because of the message type byte */
+						tmp := protocol.GetDataByColumnIndex(message[start:end], columnIndex)
+						log.Infof("tmp message : %s", tmp)
+						log.Infof("tmp message in hex: %x", tmp)
 
+						/* is this:  \xZZZZZZZ */
+						/* newData := []byte{92,120,90,90,90,90,90,90,90}*/
+
+						logger, _ := zap.NewDevelopment()
+						virtruSDK := virtruclient.NewVirtruClient(os.Getenv("TDF_USER"), os.Getenv("TDF_APPID"), logger)
+						binTdf, err := hex.DecodeString(string(tmp[2:]))
+						log.Infof("hex decode tdf error: %s", err)
+						log.Infof("Binary tdf: %x", binTdf)
+						decRes, _ := virtruSDK.DecryptTDF(binTdf)
+						log.Infof("Decrypted result: %s", decRes)
+						
+						tmp2 := protocol.NewDataMessageInsertByColumnIndex(
+							message[start:end],
+							columnIndex,
+							[]byte(decRes))
+						log.Infof("tmp2 message in hex: %x", tmp2)
+						
+						/*
+						   1.)  Get data for only that column, that's tdf data.
+						   2.)  decrypt that tdf data, get plaintext
+						   3.)  Pass orig data message, col index, and plaintext to func that
+						        returns new data message with plaintext and new lengths.
+						*/
+						newMessage = append(newMessage, tmp2...)
+						newLength += protocol.GetMessageLength(tmp2)+1
+					} else {
+						newMessage = append(newMessage, message[start:int32(start)+messageLength+1]...)
+						newLength += messageLength+1
+					}
 					/*
 					 * Calculate the next start position, add '1' to the message
 					 * length to account for the message type.
@@ -296,7 +355,7 @@ func (p *Proxy) HandleConnection(client net.Conn) {
 					start = (start + int(messageLength) + 1)
 				}
 
-				if _, err = connect.Send(client, message[:length]); err != nil {
+				if _, err = connect.Send(client, newMessage[:newLength]); err != nil {
 					log.Debugf("Error sending response to client %s", client.RemoteAddr())
 					log.Debugf("Error: %s", err.Error())
 					done = true
